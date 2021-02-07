@@ -49,24 +49,16 @@ defmodule ElixirHuffman do
 
     queue =
       frequencies
-      |> Enum.sort_by(fn {_char, frequency} ->
-        frequency
-      end)
-      |> Enum.map(fn {value, frequency} ->
-        {
-          %Leaf{value: value},
-          frequency
-        }
-      end)
+      |> Enum.sort_by(fn {_, freq} -> freq end)
+      |> Enum.map(fn {value, freq} -> {%Leaf{value: value}, freq} end)
 
     huffman_tree = build_tree(queue)
-
     dictionary = huffman_dictionary(huffman_tree)
-
     {convert(graphemes, dictionary), huffman_tree}
   end
 
-  defp build_tree([{root, _freq}]), do: root
+  defp build_tree([{root, _freq}]),
+    do: root
 
   defp build_tree(queue) do
     [{node_a, freq_a} | queue] = queue
@@ -85,18 +77,20 @@ defmodule ElixirHuffman do
     |> build_tree()
   end
 
-  defp huffman_dictionary(huffman_tree = %Node{}) do
-    huffman_dictionary(huffman_tree, %{}, <<>>)
-  end
+  defp huffman_dictionary(huffman_tree),
+    do: huffman_dictionary(huffman_tree, %{}, <<>>)
 
-  defp huffman_dictionary(huffman_tree = %Node{}, encoded_graphemes, encoded_string) do
-    left_branch = huffman_dictionary(huffman_tree.left, encoded_graphemes, <<encoded_string::bitstring, 0::size(1)>>)
-    right_branch = huffman_dictionary(huffman_tree.right, encoded_graphemes, <<encoded_string::bitstring, 1::size(1)>>)
+  defp huffman_dictionary(%Leaf{value: grapheme}, encoded_grapheme, encoded),
+    do: Map.merge(encoded_grapheme, %{grapheme => encoded})
+
+  defp huffman_dictionary(%Node{left: left, right: right}, graphemes_dictionary, encoded) do
+    left_branch =
+      huffman_dictionary(left, graphemes_dictionary, <<encoded::bitstring, 0::size(1)>>)
+
+    right_branch =
+      huffman_dictionary(right, graphemes_dictionary, <<encoded::bitstring, 1::size(1)>>)
+
     Map.merge(left_branch, right_branch)
-  end
-
-  defp huffman_dictionary(%Leaf{value: grapheme}, encoded_grapheme, encoded_string) do
-    Map.merge(encoded_grapheme, %{grapheme => encoded_string})
   end
 
   defp convert(graphemes, dictionary) do
@@ -104,4 +98,19 @@ defmodule ElixirHuffman do
       <<converted_text::bitstring, dictionary[grapheme]::bitstring>>
     end)
   end
+
+  def decode(encoded, huffman_tree),
+    do: read_tree(encoded, huffman_tree, huffman_tree, "")
+
+  defp read_tree(<<0::size(1), rest::bitstring>>, root, %Node{left: left}, decoded),
+    do: read_tree(rest, root, left, decoded)
+
+  defp read_tree(<<1::size(1), rest::bitstring>>, root, %Node{right: right}, decoded),
+    do: read_tree(rest, root, right, decoded)
+
+  defp read_tree(encoded, root, %Leaf{value: value}, decoded),
+    do: read_tree(encoded, root, root, decoded <> value)
+
+  defp read_tree(<<>>, _, _, decoded),
+    do: decoded
 end
